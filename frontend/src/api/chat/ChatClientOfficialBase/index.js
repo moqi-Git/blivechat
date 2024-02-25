@@ -333,6 +333,8 @@ export default class ChatClientOfficialBase {
   }
 
   handlerCommand(command) {
+    console.log(`handlerCommand: cmd=${command.cmd}`)
+    console.dir(command)
     let cmd = command.cmd || ''
     let pos = cmd.indexOf(':')
     if (pos != -1) {

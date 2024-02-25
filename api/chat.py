@@ -136,6 +136,7 @@ class ChatHandler(tornado.websocket.WebSocketHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        logger.debug(f'ChatHandler __init__')
         self._heartbeat_timer_handle = None
         self._receive_timeout_timer_handle = None
 

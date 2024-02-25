@@ -192,10 +192,13 @@ export default {
       }
     },
     async initChatClient() {
+      console.log("initChatClient called")
       if (this.roomKeyValue === null) {
+        console.log("initChatClient ChatClientTest")
         let ChatClientTest = (await import('@/api/chat/ChatClientTest')).default
         this.chatClient = new ChatClientTest()
       } else if (this.config.relayMessagesByServer) {
+        console.log("initChatClient ChatClientRelay")
         let roomKey = {
           type: this.roomKeyType,
           value: this.roomKeyValue
@@ -204,9 +207,11 @@ export default {
         this.chatClient = new ChatClientRelay(roomKey, this.config.autoTranslate)
       } else {
         if (this.roomKeyType === 1) {
+          console.log("initChatClient ChatClientDirectWeb")
           let ChatClientDirectWeb = (await import('@/api/chat/ChatClientDirectWeb')).default
           this.chatClient = new ChatClientDirectWeb(this.roomKeyValue)
         } else {
+          console.log("initChatClient ChatClientDirectOpenLive")
           let ChatClientDirectOpenLive = (await import('@/api/chat/ChatClientDirectOpenLive')).default
           this.chatClient = new ChatClientDirectOpenLive(this.roomKeyValue)
         }

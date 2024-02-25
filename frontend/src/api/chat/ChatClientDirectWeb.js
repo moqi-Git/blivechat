@@ -4,6 +4,7 @@ import * as chat from '.'
 import * as chatModels from './models'
 import * as base from './ChatClientOfficialBase'
 import ChatClientOfficialBase from './ChatClientOfficialBase'
+import { DEFAULT_AVATAR_URL } from "."
 
 export default class ChatClientDirectWeb extends ChatClientOfficialBase {
   constructor(roomId) {
@@ -152,6 +153,20 @@ export default class ChatClientDirectWeb extends ChatClientOfficialBase {
     let data = new chatModels.DelSuperChatMsg({ ids })
     this.msgHandler.onDelSuperChat(data)
   }
+
+  async interactWordCallback(command) {
+    let data = command.data
+    let fans_medal = ''
+    if (data.fans_medal.medal_level > 0) {
+      fans_medal = `${data.fans_medal.medal_name}(${data.fans_medal.medal_level})`
+    }
+    data = new chatModels.AddTextMsg({
+      avatarUrl: DEFAULT_AVATAR_URL,
+      authorName: `${fans_medal} ${data.uname}`,
+      content: "进入直播间",
+    })
+    this.msgHandler.onAddText(data)
+  }
 }
 
 const CMD_CALLBACK_MAP = {
@@ -159,5 +174,6 @@ const CMD_CALLBACK_MAP = {
   SEND_GIFT: ChatClientDirectWeb.prototype.sendGiftCallback,
   GUARD_BUY: ChatClientDirectWeb.prototype.guardBuyCallback,
   SUPER_CHAT_MESSAGE: ChatClientDirectWeb.prototype.superChatMessageCallback,
-  SUPER_CHAT_MESSAGE_DELETE: ChatClientDirectWeb.prototype.superChatMessageDeleteCallback
+  SUPER_CHAT_MESSAGE_DELETE: ChatClientDirectWeb.prototype.superChatMessageDeleteCallback,
+  INTERACT_WORD: ChatClientDirectWeb.prototype.interactWordCallback
 }

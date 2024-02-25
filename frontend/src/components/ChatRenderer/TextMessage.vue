@@ -16,7 +16,7 @@
             class="emoji yt-formatted-string style-scope yt-live-chat-text-message-renderer"
             :src="content.url" :alt="content.text" :shared-tooltip-text="content.text" :id="`emoji-${content.text}`"
             :width="content.width" :height="content.height"
-            :class="{ 'blc-large-emoji': content.height >= 100 }"
+            :class="{ 'blc-large-emoji': content.height >= 62 }"
           >
         </template>
         <el-badge :value="repeated" :max="99" v-if="repeated > 1" class="style-scope yt-live-chat-text-message-renderer"
