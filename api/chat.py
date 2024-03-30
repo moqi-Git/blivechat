@@ -10,6 +10,7 @@ from typing import *
 
 import aiohttp
 import tornado.websocket
+import yarl
 
 import api.base
 import blivedm.blivedm.clients.web as dm_web_cli
@@ -70,7 +71,7 @@ def make_text_message_data(
     translation: str = '',
     content_type: int = ContentType.TEXT,
     content_type_params: list = None,
-    uid: int = 0,
+    uid: str = '',
     medal_name: str = '',
 ):
     # 为了节省带宽用list而不是dict
@@ -327,23 +328,26 @@ class RoomInfoHandler(api.base.ApiHandler):
     async def get(self):
         room_id = int(self.get_query_argument('roomId'))
         logger.info('client=%s getting room info, room=%d', self.request.remote_ip, room_id)
-        room_id, owner_uid = await self._get_room_info(room_id)
-        # 连接其他host必须要key
-        host_server_list = dm_web_cli.DEFAULT_DANMAKU_SERVER_LIST
-        if owner_uid == 0:
-            # 缓存3分钟
-            self.set_header('Cache-Control', 'private, max-age=180')
-        else:
-            # 缓存1天
-            self.set_header('Cache-Control', 'private, max-age=86400')
+
+        (room_id, owner_uid), (host_server_list, host_server_token), buvid = await asyncio.gather(
+            self._get_room_info(room_id),
+            self._get_server_host_list_and_token(room_id),
+            self._get_buvid()
+        )
+
+        # 缓存1分钟
+        self.set_header('Cache-Control', 'private, max-age=60')
         self.write({
             'roomId': room_id,
             'ownerUid': owner_uid,
-            'hostServerList': host_server_list
+            'hostServerList': host_server_list,
+            'hostServerToken': host_server_token,
+            # 虽然没什么用但还是加上比较保险
+            'buvid': buvid,
         })
 
     @staticmethod
-    async def _get_room_info(room_id):
+    async def _get_room_info(room_id) -> Tuple[int, int]:
         try:
             async with utils.request.http_session.get(
                 dm_web_cli.ROOM_INIT_URL,
@@ -372,19 +376,74 @@ class RoomInfoHandler(api.base.ApiHandler):
         room_info = data['data']['room_info']
         return room_info['room_id'], room_info['uid']
 
+    async def _get_server_host_list_and_token(self, room_id) -> Tuple[dict, Optional[str]]:
+        try:
+            async with utils.request.http_session.get(
+                dm_web_cli.DANMAKU_SERVER_CONF_URL,
+                headers={
+                    # token会对UA签名，要使用和客户端一样的UA
+                    'User-Agent': self.request.headers.get('User-Agent', '')
+                },
+                params={
+                    'id': room_id,
+                    'type': 0
+                }
+            ) as res:
+                if res.status != 200:
+                    logger.warning('room %d _get_server_host_list failed: %d %s', room_id,
+                                   res.status, res.reason)
+                    return dm_web_cli.DEFAULT_DANMAKU_SERVER_LIST, None
+                data = await res.json()
+        except (aiohttp.ClientConnectionError, asyncio.TimeoutError):
+            logger.exception('room %d _get_server_host_list failed', room_id)
+            return dm_web_cli.DEFAULT_DANMAKU_SERVER_LIST, None
+
+        if data['code'] != 0:
+            logger.warning('room %d _get_server_host_list failed: %s', room_id, data['message'])
+            return dm_web_cli.DEFAULT_DANMAKU_SERVER_LIST, None
+
+        data = data['data']
+        host_server_list = data['host_list']
+        if not host_server_list:
+            logger.warning('room %d _get_server_host_list failed: host_server_list is empty')
+            return dm_web_cli.DEFAULT_DANMAKU_SERVER_LIST, None
+
+        host_server_token = data.get('token', None)
+        return host_server_list, host_server_token
+
+    async def _get_buvid(self):
+        buvid = self._do_get_buvid()
+        if buvid != '':
+            return buvid
+
+        try:
+            async with utils.request.http_session.get(dm_web_cli.BUVID_INIT_URL):
+                pass
+        except (aiohttp.ClientConnectionError, asyncio.TimeoutError):
+            pass
+        return self._do_get_buvid()
+
+    @staticmethod
+    def _do_get_buvid():
+        cookies = utils.request.http_session.cookie_jar.filter_cookies(yarl.URL(dm_web_cli.BUVID_INIT_URL))
+        buvid_cookie = cookies.get('buvid3', None)
+        if buvid_cookie is None:
+            return ''
+        return buvid_cookie.value
+
 
 class AvatarHandler(api.base.ApiHandler):
     async def get(self):
+        # uid基本是0了，现在这个接口唯一的作用是算用户名MD5，其实可以放到前端
         uid = int(self.get_query_argument('uid'))
         username = self.get_query_argument('username', '')
         avatar_url = await services.avatar.get_avatar_url_or_none(uid)
         if avatar_url is None:
             avatar_url = services.avatar.get_default_avatar_url(uid, username)
-            # 缓存3分钟
-            self.set_header('Cache-Control', 'private, max-age=180')
+            cache_time = 86400 if uid == 0 else 180
         else:
-            # 缓存1天
-            self.set_header('Cache-Control', 'private, max-age=86400')
+            cache_time = 86400
+        self.set_header('Cache-Control', f'private, max-age={cache_time}')
         self.write({'avatarUrl': avatar_url})
 
 
